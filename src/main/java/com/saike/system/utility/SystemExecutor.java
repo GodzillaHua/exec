@@ -70,17 +70,13 @@ public class SystemExecutor {
                         logger.info(line);
                         continue;
                     }
-
                     if (level == Level.ERROR){
                         logger.error(line);
                     }
-
                 }
             }catch (IOException e){
-                logger.error("", e);
+                logger.error("io error", e);
             }
-
-
         }
     }
 
