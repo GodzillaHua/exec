@@ -17,66 +17,78 @@ package com.saike.system.utility;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.event.Level;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class SystemExecutor {
 
     private static Logger logger = LoggerFactory.getLogger(SystemExecutor.class);
 
-    public void execute(List<String> commands){
-        execute(commands, 0);
+    public List<String> execute(List<String> commands) throws IOException, InterruptedException {
+        return execute(commands, null);
     }
 
-    public void execute(List<String> commands, int timeout){
+    public List<String> execute(List<String> commands, OutputFilter filter) throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(commands);
         try {
             Process process = pb.start();
-            LoggingThread stdout = new LoggingThread(process.getInputStream(), Level.INFO);
-            LoggingThread stderr = new LoggingThread(process.getErrorStream(), Level.ERROR);
-            if (timeout > 0){
-                process.waitFor(timeout, TimeUnit.SECONDS);
-            }else {
-                process.waitFor();
-            }
+            LoggingThread stdout = new LoggingThread(process.getInputStream(), filter);
+            LoggingThread stderr = new LoggingThread(process.getErrorStream(), filter);
+            stdout.start();
+            stderr.start();
+            int ret = process.waitFor();
             stdout.join();
             stderr.join();
+            if (ret == 0) {
+                return stdout.getOutput();
+            } else {
+                return stderr.getOutput();
+            }
         } catch (IOException e) {
             logger.error("command execute error", e);
-        } catch (InterruptedException e){
+            throw e;
+        } catch (InterruptedException e) {
             logger.error("command execute interrupted", e);
+            throw e;
         }
-
     }
 
     static class LoggingThread extends Thread {
         private InputStream is;
-        private Level level;
+        private OutputFilter filter;
+        private List<String> output = new ArrayList<>();
 
-        public LoggingThread(InputStream is, Level level){
+        public LoggingThread(InputStream is, OutputFilter filter) {
             this.is = is;
-            this.level = level;
+            this.filter = filter;
         }
 
         @Override
         public void run() {
-            try(BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF8"))){
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF8"))) {
                 String line;
-                while((line = reader.readLine()) != null){
-                    if (level == Level.INFO){
-                        logger.info(line);
-                        continue;
+                while ((line = reader.readLine()) != null) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug(line);
                     }
-                    if (level == Level.ERROR){
-                        logger.error(line);
+                    if (filter != null) {
+                        output.add(filter.filter(line));
+                    } else {
+                        output.add(line);
                     }
                 }
-            }catch (IOException e){
+            } catch (IOException e) {
                 logger.error("io error", e);
             }
+        }
+
+        public List<String> getOutput() {
+            return output;
         }
     }
 
