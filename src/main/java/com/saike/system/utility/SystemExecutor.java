@@ -38,16 +38,23 @@ public class SystemExecutor {
         try {
             Process process = pb.start();
             LoggingThread stdout = new LoggingThread(process.getInputStream(), filter);
+            stdout.setName("STDOUT");
             LoggingThread stderr = new LoggingThread(process.getErrorStream(), filter);
+            stderr.setName("STDERR");
             stdout.start();
             stderr.start();
             int ret = process.waitFor();
             stdout.join();
             stderr.join();
-            if (ret == 0) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("system return code:" + ret);
+            }
+            if (stdout.getOutput().size() > 0) {
                 return stdout.getOutput();
-            } else {
+            } else if (stderr.getOutput().size() > 0) {
                 return stderr.getOutput();
+            } else {
+                return new ArrayList<>(0);
             }
         } catch (IOException e) {
             logger.error("command execute error", e);
@@ -74,7 +81,10 @@ public class SystemExecutor {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (logger.isDebugEnabled()) {
-                        logger.debug(line);
+                        logger.debug(getName() + ":" + line);
+                    }
+                    if ("".equals(line.trim())) {
+                        continue;
                     }
                     if (filter != null) {
                         output.add(filter.filter(line));
